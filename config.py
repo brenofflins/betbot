@@ -29,14 +29,20 @@ LEAGUES = {
     "Bundesliga": {"api_football_id": 78, "odds_api_key": "soccer_germany_bundesliga", "country": "Germany", "flag": "🇩🇪"},
     "Ligue 1": {"api_football_id": 61, "odds_api_key": "soccer_france_ligue_one", "country": "France", "flag": "🇫🇷"},
     # South America
-    "Brasileirão": {"api_football_id": 71, "odds_api_key": "soccer_brazil_campeonato", "country": "Brazil", "flag": "🇧🇷"},
+    "Brasileirão Série A": {"api_football_id": 71, "odds_api_key": "soccer_brazil_campeonato", "country": "Brazil", "flag": "🇧🇷"},
+    "Brasileirão Série B": {"api_football_id": 72, "odds_api_key": "soccer_brazil_serie_b", "country": "Brazil", "flag": "🇧🇷"},
+    "Brasileirão Série C": {"api_football_id": 76, "odds_api_key": None, "country": "Brazil", "flag": "🇧🇷"},
     "Copa do Brasil": {"api_football_id": 73, "odds_api_key": "soccer_brazil_copa_do_brasil", "country": "Brazil", "flag": "🇧🇷"},
+    "Copa do Nordeste": {"api_football_id": 475, "odds_api_key": None, "country": "Brazil", "flag": "🇧🇷"},
     "Liga Argentina": {"api_football_id": 128, "odds_api_key": "soccer_argentina_primera_division", "country": "Argentina", "flag": "🇦🇷"},
     # Continental
     "Champions League": {"api_football_id": 2, "odds_api_key": "soccer_uefa_champs_league", "country": "Europe", "flag": "🇪🇺"},
     "Europa League": {"api_football_id": 3, "odds_api_key": "soccer_uefa_europa_league", "country": "Europe", "flag": "🇪🇺"},
     "Libertadores": {"api_football_id": 13, "odds_api_key": "soccer_conmebol_copa_libertadores", "country": "South America", "flag": "🌎"},
     "Sul-Americana": {"api_football_id": 11, "odds_api_key": "soccer_conmebol_copa_sudamericana", "country": "South America", "flag": "🌎"},
+    "Copa África": {"api_football_id": 6, "odds_api_key": "soccer_africa_cup_of_nations", "country": "Africa", "flag": "🌍"},
+    # International
+    "Amistosos Internacionais": {"api_football_id": 10, "odds_api_key": "soccer_international_friendlies", "country": "World", "flag": "🌐"},
 }
 
 # =============================================================================
