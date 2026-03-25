@@ -186,20 +186,30 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Fetch data in parallel
         fixtures_task = football.get_fixtures_by_league(league_id, next_n=5)
-        odds_task = odds.get_best_odds(odds_key)
 
-        fixtures, odds_events = await asyncio.gather(fixtures_task, odds_task)
+        # Only fetch odds if the league has an odds_api_key
+        odds_events = []
+        if odds_key:
+            try:
+                odds_task = odds.get_best_odds(odds_key)
+                fixtures, odds_events = await asyncio.gather(fixtures_task, odds_task)
+            except (odds.OddsAPIError, odds.RateLimitExceeded) as e:
+                logger.warning(f"Odds not available for {league_name}: {e}")
+                fixtures = await fixtures_task
+        else:
+            fixtures = await fixtures_task
 
         if not fixtures:
             await update.message.reply_text(f"Nenhum jogo próximo encontrado para {league_name}.")
             return
 
-        if not odds_events:
+        no_odds = not odds_events
+        if no_odds and odds_key:
             await update.message.reply_text(
-                f"Odds não disponíveis para {league_name} no momento. "
-                "Tente mais perto do horário dos jogos."
+                f"⚠️ Odds não disponíveis para {league_name} no momento.\n"
+                "Analisando apenas com estatísticas...",
+                parse_mode=ParseMode.HTML,
             )
-            return
 
         conn = db.get_connection()
         all_picks = []
@@ -208,10 +218,10 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
             home_team = fixture["home_team"]
             away_team = fixture["away_team"]
 
-            # Find matching odds event
-            odds_event = _find_matching_event(odds_events, home_team, away_team)
-            if not odds_event:
-                continue
+            # Find matching odds event (if odds available)
+            odds_event = None
+            if odds_events:
+                odds_event = _find_matching_event(odds_events, home_team, away_team)
 
             # Fetch detailed stats (parallel)
             try:
@@ -241,61 +251,71 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 home_stats, away_stats, h2h, standings, injuries, league_name,
             )
 
-            # Find value bets
-            value_bets = analyzer.find_value_bets(
-                probabilities, odds_event.get("best_odds", {}),
-            )
-
-            if value_bets:
-                # Check for Superbet link
-                superbet = odds.find_superbet_odds(odds_event)
-                superbet_link = (
-                    superbet.get("link") if superbet
-                    else odds.build_superbet_event_url(home_team, away_team)
+            # If we have odds, find value bets
+            if odds_event:
+                value_bets = analyzer.find_value_bets(
+                    probabilities, odds_event.get("best_odds", {}),
                 )
 
-                # Format and send
-                msg = fmt.format_value_bets(
+                if value_bets:
+                    superbet = odds.find_superbet_odds(odds_event)
+                    superbet_link = (
+                        superbet.get("link") if superbet
+                        else odds.build_superbet_event_url(home_team, away_team)
+                    )
+
+                    msg = fmt.format_value_bets(
+                        home_team=home_team,
+                        away_team=away_team,
+                        league=league_name,
+                        league_flag=flag,
+                        match_date=fixture.get("date", ""),
+                        value_bets=value_bets,
+                        reasoning=probabilities["reasoning"],
+                        patterns=probabilities["patterns_triggered"],
+                        superbet_link=superbet_link,
+                    )
+
+                    if msg:
+                        await update.message.reply_text(msg, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+                    for vb in value_bets:
+                        db.save_pick(conn, {
+                            "fixture_id": fixture["fixture_id"],
+                            "league": league_name,
+                            "home_team": home_team,
+                            "away_team": away_team,
+                            "match_date": fixture.get("date"),
+                            "market": vb["market"],
+                            "pick": vb["pick"],
+                            "odd": vb["odd"],
+                            "bookmaker": vb["bookmaker"],
+                            "implied_prob": vb["implied_prob"],
+                            "estimated_prob": vb["estimated_prob"],
+                            "edge": vb["edge"],
+                            "confidence": vb["confidence"],
+                            "reasoning": "; ".join(probabilities["reasoning"][:3]),
+                            "deep_link": vb.get("link") or superbet_link,
+                        })
+
+                    all_picks.append({
+                        "home_team": home_team,
+                        "away_team": away_team,
+                        "league_flag": flag,
+                        "value_bets": value_bets,
+                    })
+            else:
+                # No odds available — send stats-only analysis
+                msg = fmt.format_stats_only_analysis(
                     home_team=home_team,
                     away_team=away_team,
                     league=league_name,
                     league_flag=flag,
                     match_date=fixture.get("date", ""),
-                    value_bets=value_bets,
-                    reasoning=probabilities["reasoning"],
-                    patterns=probabilities["patterns_triggered"],
-                    superbet_link=superbet_link,
+                    probabilities=probabilities,
                 )
-
                 if msg:
                     await update.message.reply_text(msg, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-
-                # Save picks to database
-                for vb in value_bets:
-                    db.save_pick(conn, {
-                        "fixture_id": fixture["fixture_id"],
-                        "league": league_name,
-                        "home_team": home_team,
-                        "away_team": away_team,
-                        "match_date": fixture.get("date"),
-                        "market": vb["market"],
-                        "pick": vb["pick"],
-                        "odd": vb["odd"],
-                        "bookmaker": vb["bookmaker"],
-                        "implied_prob": vb["implied_prob"],
-                        "estimated_prob": vb["estimated_prob"],
-                        "edge": vb["edge"],
-                        "confidence": vb["confidence"],
-                        "reasoning": "; ".join(probabilities["reasoning"][:3]),
-                        "deep_link": vb.get("link") or superbet_link,
-                    })
-
-                all_picks.append({
-                    "home_team": home_team,
-                    "away_team": away_team,
-                    "league_flag": flag,
-                    "value_bets": value_bets,
-                })
 
         conn.close()
 
@@ -327,12 +347,12 @@ async def cmd_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Nenhum jogo encontrado hoje.")
             return
 
-        # Find unique leagues with games
+        # Find unique leagues with games (prefer those with odds for /value scan)
         active_leagues = set()
         for f in fixtures:
             league_id = f.get("league_id")
             for name, data in config.LEAGUES.items():
-                if data["api_football_id"] == league_id:
+                if data["api_football_id"] == league_id and data.get("odds_api_key"):
                     active_leagues.add(name)
 
         if not active_leagues:
