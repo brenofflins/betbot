@@ -82,6 +82,73 @@ def format_value_bets(
     return "\n".join(lines)
 
 
+def format_stats_only_analysis(
+    home_team: str,
+    away_team: str,
+    league: str,
+    league_flag: str,
+    match_date: str,
+    probabilities: dict,
+) -> str:
+    """Format analysis for leagues without odds (stats-only mode)."""
+    try:
+        dt = datetime.fromisoformat(match_date.replace("Z", "+00:00"))
+        time_str = dt.strftime("%H:%M")
+        date_str = dt.strftime("%d/%m")
+    except (ValueError, AttributeError):
+        time_str = "--:--"
+        date_str = match_date or ""
+
+    lines = [
+        f"{league_flag} <b>{league}</b>",
+        f"⚽ <b>{home_team}</b> vs <b>{away_team}</b>",
+        f"🕐 {date_str} às {time_str}",
+        "",
+        "📊 <b>Análise Estatística</b> (odds não disponíveis)",
+        "",
+    ]
+
+    # Show probabilities
+    probs = probabilities.get("h2h", {})
+    if probs:
+        lines.append(f"🏠 Vitória {home_team}: <b>{probs.get('home', 0):.0%}</b>")
+        lines.append(f"🤝 Empate: <b>{probs.get('draw', 0):.0%}</b>")
+        lines.append(f"✈️ Vitória {away_team}: <b>{probs.get('away', 0):.0%}</b>")
+        lines.append("")
+
+    totals = probabilities.get("totals", {})
+    if totals:
+        lines.append(f"⬆️ Over 2.5: <b>{totals.get('over_25', 0):.0%}</b>")
+        lines.append(f"⬇️ Under 2.5: <b>{totals.get('under_25', 0):.0%}</b>")
+        lines.append("")
+
+    btts = probabilities.get("btts", {})
+    if btts:
+        lines.append(f"✅ Ambas marcam: <b>{btts.get('yes', 0):.0%}</b>")
+        lines.append(f"❌ Não marcam ambas: <b>{btts.get('no', 0):.0%}</b>")
+        lines.append("")
+
+    # Reasoning
+    reasoning = probabilities.get("reasoning", [])
+    if reasoning:
+        lines.append("📋 <b>Análise:</b>")
+        for r in reasoning[:5]:
+            lines.append(f"• {r}")
+
+    # Patterns
+    patterns = probabilities.get("patterns_triggered", [])
+    if patterns:
+        lines.append("")
+        lines.append("🔄 <b>Padrões detectados:</b>")
+        from modules.analyzer import PATTERNS
+        for p in patterns:
+            desc = PATTERNS.get(p, {}).get("description", p)
+            lines.append(f"• {desc}")
+
+    lines.extend(["", "⚠️ Sem odds disponíveis — use como referência para apostar manualmente."])
+    return "\n".join(lines)
+
+
 def format_daily_summary(picks_by_match: list[dict]) -> str:
     """Format a summary of all daily picks."""
     if not picks_by_match:
